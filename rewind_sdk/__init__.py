@@ -24,6 +24,13 @@ from contextlib import contextmanager
 from . import envelope as envelope_mod
 from . import llm as llm_mod
 from . import mirror, tracing
+
+try:  # Load .env if python-dotenv is installed. Optional by design.
+    from dotenv import load_dotenv as _load_dotenv
+
+    _load_dotenv()
+except Exception:  # pragma: no cover - .env support is a convenience
+    pass
 from .tracing import GUARDRAIL_LOGGER
 
 __all__ = ["Rewind", "ReplayPlan", "OVERRIDE_TYPES"]
@@ -85,7 +92,9 @@ class _Span:
 
         if otel_span is not None:
             context = otel_span.get_span_context()
-            self.trace_id = format(context.trace_id, "032x")
+            # An explicit trace_id always wins. Every span of one agent run must
+            # land in the same bundle even if OTel handed back a fresh context.
+            self.trace_id = trace_id or format(context.trace_id, "032x")
             self.span_id = format(context.span_id, "016x")
         else:
             self.trace_id = trace_id or _new_trace_id()
@@ -186,12 +195,23 @@ class Rewind:
         self.last_trace_id = ""
 
     # -------------------------------------------------------------- spans
-    def _start_span(self, name: str, trace_id: str = "", parent_span_id: str = ""):
+    def _start_span(
+        self,
+        name: str,
+        trace_id: str = "",
+        parent_span_id: str = "",
+        otel_parent=None,
+    ):
         otel_span = None
         tracer = tracing.tracer()
         if tracer is not None:
             try:
-                otel_span = tracer.start_span(name)
+                parent_context = None
+                if otel_parent is not None:
+                    from opentelemetry import trace as _otel_trace
+
+                    parent_context = _otel_trace.set_span_in_context(otel_parent)
+                otel_span = tracer.start_span(name, context=parent_context)
             except Exception:
                 otel_span = None
         return _Span(name, trace_id=trace_id, parent_span_id=parent_span_id, otel_span=otel_span)
@@ -255,7 +275,9 @@ class Rewind:
         index = run.next_index()
         plan = run.plan
         restored = plan.restored(index) if plan else None
-        span = self._start_span("tool " + name, run.trace_id, run.span.span_id)
+        span = self._start_span(
+            "tool " + name, run.trace_id, run.span.span_id, otel_parent=run.span.otel_span
+        )
 
         source = "live"
         used_args = dict(args or {})
@@ -317,7 +339,9 @@ class Rewind:
         restored = plan.restored(index) if plan else None
         model = model or llm_mod.default_model()
         params = params or {"temperature": 0, "max_tokens": 512, "seed": 42}
-        span = self._start_span("chat " + model, run.trace_id, run.span.span_id)
+        span = self._start_span(
+            "chat " + model, run.trace_id, run.span.span_id, otel_parent=run.span.otel_span
+        )
 
         source = "live"
         used_messages = [dict(m) for m in (messages or [])]
@@ -404,7 +428,12 @@ class Rewind:
         """Ground-truth check. A failure is what SigNoz alerts on."""
         if passed:
             return True
-        span = self._start_span("guardrail " + name, run.trace_id, run.span.span_id)
+        span = self._start_span(
+            "guardrail " + name,
+            run.trace_id,
+            run.span.span_id,
+            otel_parent=run.span.otel_span,
+        )
         span.set_many(
             {
                 "rewind.kind": "guardrail_failure",
