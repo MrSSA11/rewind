@@ -1,0 +1,49 @@
+# Self-hosted SigNoz for Rewind, deployed with SigNoz Foundry.
+#
+#   cd signoz && foundry up
+#
+# Foundry writes casting.yaml.lock next to this file. Commit that lock file:
+# it pins the exact component versions this project was demoed against.
+apiVersion: foundry/v1
+kind: Casting
+metadata:
+  name: rewind-signoz
+  description: Observability backend for the Rewind agent replay debugger
+
+spec:
+  signoz:
+    ports:
+      ui: 8080
+      otlpGrpc: 4317
+      otlpHttp: 4318
+
+    # Short retention: this is a hackathon box, not production.
+    retention:
+      traces: 3d
+      logs: 3d
+      metrics: 7d
+
+    clickhouse:
+      resources:
+        memory: 3Gi
+        cpu: 1.5
+      storage:
+        size: 10Gi
+
+    collector:
+      resources:
+        memory: 512Mi
+        cpu: 0.5
+      # Rewind emits one envelope log per agent step, so batch generously.
+      batch:
+        sendBatchSize: 1024
+        timeout: 5s
+
+    alertmanager:
+      enabled: true
+      receivers:
+        # Rewind listens here and turns firing alerts into a triage queue.
+        - name: rewind
+          webhook:
+            url: http://host.docker.internal:8000/api/webhooks/signoz
+            sendResolved: true
