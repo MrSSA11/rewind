@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.trace_id[:8] }}{% endblock %}
+{% block content %}
+
+<a href="/" class="text-xs text-slate-400">&lsaquo; all runs</a>
+
+<div class="mt-2 rounded-2xl border {% if run.failed %}border-rose-500/40 bg-rose-500/5{% else %}border-slate-800 bg-slate-900/60{% endif %} p-4">
+  <div class="flex items-center gap-2">
+    <span class="h-2 w-2 rounded-full {% if run.failed %}bg-rose-500{% else %}bg-emerald-500{% endif %}"></span>
+    <h1 class="text-base font-semibold">{{ run.agent }}</h1>
+    <span class="text-xs text-slate-500">{{ run.status }}</span>
+  </div>
+  <p class="mt-2 text-sm text-slate-300">{{ run.question }}</p>
+  {% if run.answer %}
+  <p class="mt-2 rounded-lg bg-slate-800/60 p-3 text-sm text-slate-200">{{ run.answer }}</p>
+  {% endif %}
+  <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+    <span>{{ "%.0f"|format(run.duration_ms) }} ms</span>
+    <span>{{ run.total_tokens }} tokens</span>
+    <span>${{ "%.5f"|format(run.total_cost_usd) }}</span>
+  </div>
+  {% if run.parent_trace_id %}
+  <div class="mt-3 rounded-lg border border-sky-500/40 bg-sky-500/10 p-2 text-xs text-sky-200">
+    Fork of <a class="underline" href="/runs/{{ run.parent_trace_id }}">{{ run.parent_trace_id[:12] }}</a>
+    &middot; override: {{ run.override_type }}
+    &middot; <a class="underline" href="/diff?a={{ run.parent_trace_id }}&b={{ run.trace_id }}">see diff</a>
+  </div>
+  {% endif %}
+  <a href="{{ trace_url }}" target="_blank" rel="noreferrer"
+     class="mt-3 block rounded-lg border border-slate-700 px-3 py-2 text-center text-xs text-sky-400">
+    Open this trace in SigNoz
+  </a>
+</div>
+
+<h2 class="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Steps</h2>
+<ol class="space-y-2">
+  {% for step in run.steps %}
+  <li>
+    {% if step.kind == 'guardrail' %}
+    <div class="rounded-xl border border-rose-500/50 bg-rose-500/10 px-4 py-3">
+      <div class="text-sm font-medium text-rose-200">Guardrail failed: {{ step.name }}</div>
+      <div class="mt-1 text-xs text-rose-200/80">{{ step.summary }}</div>
+    </div>
+    {% else %}
+    <a href="/runs/{{ run.trace_id }}/steps/{{ step.span_id }}"
+       class="block rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex min-w-0 items-center gap-2">
+          <span class="shrink-0 rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase text-slate-400">{{ step.kind }}</span>
+          <span class="truncate text-sm font-medium">{{ step.index }}. {{ step.name }}</span>
+        </div>
+        <span class="shrink-0 text-slate-600">&rsaquo;</span>
+      </div>
+      {% if step.summary %}
+      <div class="mt-1 line-clamp-2 text-xs text-slate-400">{{ step.summary }}</div>
+      {% endif %}
+      <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+        <span>{{ "%.0f"|format(step.duration_ms) }} ms</span>
+        {% if step.tokens %}<span>{{ step.tokens }} tokens</span>{% endif %}
+        {% if step.cost_usd %}<span>${{ "%.5f"|format(step.cost_usd) }}</span>{% endif %}
+        {% if step.source != 'live' %}<span class="text-sky-400">{{ step.source }}</span>{% endif %}
+        {% if not step.replayable %}<span class="text-amber-400">no envelope</span>{% endif %}
+      </div>
+    </a>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ol>
+
+{% endblock %}
