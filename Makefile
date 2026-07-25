@@ -1,35 +1,44 @@
-.PHONY: help install signoz demo run test health clean
+.DEFAULT_GOAL := help
+.PHONY: help install signoz demo run test health doctor clean
 
-help:
-	@echo "Rewind - a rewind button for AI agents"
-	@echo ""
-	@echo "  make install   install Python dependencies"
-	@echo "  make signoz    start self-hosted SigNoz with Foundry"
-	@echo "  make demo      seed the buggy demo run, then start the app"
-	@echo "  make run       start the Rewind app on port 8000"
-	@echo "  make test      run the test suite"
-	@echo "  make health    check which telemetry backend is serving"
-	@echo "  make clean     remove local telemetry mirror and caches"
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
-install:
+install: ## Install Python dependencies
 	pip install -r requirements.txt
 
-signoz:
+signoz: ## Start self-hosted SigNoz with Foundry (UI on :8080)
 	cd signoz && foundry up
 
-demo:
+demo: ## Seed the broken demo run, then start Rewind on :8000
 	FAKE_LLM=1 python -m demo_agent.seed
 	$(MAKE) run
 
-run:
+run: ## Start the Rewind web app on :8000
 	uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-test:
+test: ## Run the test suite (no network, no API keys)
 	FAKE_LLM=1 REWIND_DISABLE_OTEL=1 REWIND_BACKEND=mirror pytest -q
 
-health:
-	curl -s localhost:8000/healthz
+health: ## Check whether Rewind can reach SigNoz
+	@curl -s localhost:8000/healthz | python -m json.tool || echo "Rewind is not running. Try: make run"
 
-clean:
-	rm -rf .rewind __pycache__ .pytest_cache
-	find . -name "__pycache__" -type d -exec rm -rf {} +
+doctor: ## Diagnose telemetry: where the mirror is and what is in it
+	@python -c "import json,os;\
+from rewind_sdk import mirror;\
+p=mirror.path();\
+r=mirror.read_all();\
+t={};\
+[t.setdefault(x.get('trace_id','?'),[0,0]) for x in r];\
+[t[x.get('trace_id','?')].__setitem__(0 if x.get('type')=='span' else 1, t[x.get('trace_id','?')][0 if x.get('type')=='span' else 1]+1) for x in r];\
+print('cwd         :', os.getcwd());\
+print('mirror path :', p.resolve());\
+print('exists      :', p.exists());\
+print('records     :', len(r));\
+print('backend     :', os.getenv('REWIND_BACKEND','auto'));\
+print('traces      :', len(t));\
+[print('   ', k, '->', v[0], 'spans,', v[1], 'envelopes') for k,v in t.items()]"
+
+clean: ## Remove the local telemetry mirror and caches
+	rm -rf .rewind .pytest_cache
+	find . -name __pycache__ -type d -exec rm -rf {} +
