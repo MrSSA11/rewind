@@ -1,49 +1,22 @@
-# Self-hosted SigNoz for Rewind, deployed with SigNoz Foundry.
+# Self-hosted SigNoz, declared in one file and deployed with one command.
 #
-#   cd signoz && foundry up
+#   foundryctl cast -f casting.yaml
 #
-# Foundry writes casting.yaml.lock next to this file. Commit that lock file:
-# it pins the exact component versions this project was demoed against.
-apiVersion: foundry/v1
-kind: Casting
+# Foundry validates the required tools, generates the Docker Compose output
+# into ./pours, and brings SigNoz up. Defaults give us everything Rewind
+# needs:
+#
+#   8080  SigNoz UI and query API
+#   4317  OTLP gRPC
+#   4318  OTLP HTTP   <- rewind_sdk exports here
+#
+# Deliberately NOT enabling spec.mcp: the SigNoz MCP server binds port 8000,
+# which is the port the Rewind web app uses.
+apiVersion: v1alpha1
+kind: Installation
 metadata:
-  name: rewind-signoz
-  description: Observability backend for the Rewind agent replay debugger
-
+  name: signoz
 spec:
-  signoz:
-    ports:
-      ui: 8080
-      otlpGrpc: 4317
-      otlpHttp: 4318
-
-    # Short retention: this is a hackathon box, not production.
-    retention:
-      traces: 3d
-      logs: 3d
-      metrics: 7d
-
-    clickhouse:
-      resources:
-        memory: 3Gi
-        cpu: 1.5
-      storage:
-        size: 10Gi
-
-    collector:
-      resources:
-        memory: 512Mi
-        cpu: 0.5
-      # Rewind emits one envelope log per agent step, so batch generously.
-      batch:
-        sendBatchSize: 1024
-        timeout: 5s
-
-    alertmanager:
-      enabled: true
-      receivers:
-        # Rewind listens here and turns firing alerts into a triage queue.
-        - name: rewind
-          webhook:
-            url: http://host.docker.internal:8000/api/webhooks/signoz
-            sendResolved: true
+  deployment:
+    mode: docker
+    flavor: compose

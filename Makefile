@@ -8,7 +8,7 @@ install: ## Install Python dependencies
 	pip install -r requirements.txt
 
 signoz: ## Start self-hosted SigNoz with Foundry (UI on :8080)
-	cd signoz && foundry up
+	cd signoz && PATH="$$HOME/.local/bin:$$PATH" foundryctl cast -f casting.yaml
 
 demo: ## Seed the broken demo run, then start Rewind on :8000
 	FAKE_LLM=1 python -m demo_agent.seed

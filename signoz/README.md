@@ -1,74 +1,115 @@
-# SigNoz setup for Rewind
+# Self-hosted SigNoz for Rewind
 
-Rewind treats SigNoz as its **only** system of record. There is no application
-database: every run you see in the UI is reconstructed from traces and logs
-that SigNoz already stores.
+SigNoz is not a side car for this project. It is the database. Rewind stores no
+run data of its own: every run you see in the UI is reconstructed by querying
+spans and log records back out of SigNoz.
 
-## 1. Start SigNoz
+## Start it
 
 ```bash
+curl -fsSL https://signoz.io/foundry.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
+
 cd signoz
-foundry up
+foundryctl cast -f casting.yaml
 ```
 
-This reads `casting.yaml` and brings up SigNoz, ClickHouse, and the OTel
-collector. Foundry generates `casting.yaml.lock` pinning exact versions -
-commit it.
+The installer drops the binary at `~/.local/bin/foundryctl`. If your shell says
+`command not found`, that folder is not on your `PATH` yet - run the `export`
+line above, and add it to `~/.bashrc` to make it stick.
 
-When it finishes:
+`cast` validates your tooling, generates the Docker Compose files into `pours/`,
+and starts the stack. First run pulls several images and takes a few minutes.
 
-- SigNoz UI: <http://localhost:8080>
-- OTLP HTTP (what the SDK uses): <http://localhost:4318>
-- OTLP gRPC: `localhost:4317`
-
-## 2. Point the app at it
+From the repo root you can also just run:
 
 ```bash
-cp .env.example .env
+make signoz
 ```
 
-The defaults already target `http://localhost:4318`. In GitHub Codespaces,
-also set `SIGNOZ_UI_URL` to your forwarded 8080 URL so "Open in SigNoz" links
-resolve from your browser.
+## Check it
 
-## 3. Import the dashboard
+```bash
+docker ps
+```
 
-In SigNoz: **Dashboards -> New dashboard -> Import JSON**, then paste
-`dashboards/agent-health.json`.
+Every container should read `Up`. Then open <http://localhost:8080> and create
+an account. It is local to your machine.
 
-Eight panels: runs per minute, error rate, run duration percentiles, tokens by
-model, cost per hour, tool call volume, top failing spans, and replay count.
+## Ports
 
-## 4. Import the alerts
-
-In SigNoz: **Alerts -> New alert -> Import JSON**, once per file in `alerts/`:
-
-| File | Fires when |
+| Port | What |
 | --- | --- |
-| `guardrail-failure.json` | any agent run trips a guardrail |
-| `error-rate.json` | more than 10% of runs fail |
-| `latency-p95.json` | p95 run duration goes above 20s |
-| `cost-spike.json` | spend passes $5/hour |
+| 8080 | SigNoz UI and query API |
+| 4317 | OTLP gRPC |
+| 4318 | OTLP HTTP - `rewind_sdk` exports here |
+| 8000 | Rewind itself, **not** SigNoz |
 
-Each alert notifies the `rewind` webhook receiver defined in `casting.yaml`.
-Rewind receives it at `POST /api/webhooks/signoz`, pulls the trace ids out of
-the payload, and puts those runs at the top of the triage queue on the home
-screen. That is the full loop: **alert -> the exact broken run -> rewind it**.
+The SigNoz MCP server is intentionally left disabled in `casting.yaml`. It binds
+port 8000, which would collide with the Rewind web app.
 
-## What Rewind writes to SigNoz
+## Point Rewind at it
 
-| Signal | Contents |
+`.env` in the repo root:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+SIGNOZ_URL=http://localhost:8080
+REWIND_BACKEND=auto
+```
+
+On GitHub Codespaces also set `SIGNOZ_UI_URL` to the public forwarded URL of
+port 8080, so the "Open this trace in SigNoz" links resolve from your browser
+rather than from inside the container.
+
+Confirm which backend is serving:
+
+```bash
+make health
+```
+
+`"serving": "signoz"` means reads are coming from SigNoz. `"mirror"` means
+SigNoz was unreachable and Rewind fell back to the local JSONL cache so the demo
+still runs. The fallback is a convenience, not the design.
+
+## Dashboard
+
+`dashboards/agent-health.json` - import via **Dashboards -> New dashboard ->
+Import JSON**. Eight panels: runs per minute, error rate, run duration p50/p95,
+tokens by model, cost per hour, tool calls, top failing spans, and replays.
+
+## Alerts
+
+Import each file under `alerts/` via **Alerts -> New alert -> Import JSON**.
+
+| Alert | Fires when |
 | --- | --- |
-| Traces | One span per agent step, using OpenTelemetry GenAI semantic conventions (`gen_ai.*`) plus `agent.*` and `rewind.*` attributes |
-| Logs | One replay envelope per step, correlated by `trace_id` + `span_id`, carrying the exact inputs needed to re-run that step |
-| Metrics | `gen_ai.client.token.usage`, `agent.run.duration`, `agent.run.cost.usd`, `agent.tool.calls`, `agent.run.errors`, `rewind.replays` |
+| `guardrail-failure.json` | any log record with `rewind.kind = guardrail_failure` |
+| `error-rate.json` | more than 10% of runs error |
+| `latency-p95.json` | p95 run duration goes over 20s |
+| `cost-spike.json` | spend passes $5 in an hour |
 
-Forked runs are new traces tagged `rewind.parent_trace_id`,
-`rewind.forked_from_span_id`, and `rewind.experiment=true`, so you can filter
-experiments out of production dashboards with a single clause.
+All four notify a channel named `rewind`. Create it under **Settings -> Alert
+Channels -> New channel**, type **Webhook**:
 
-## If SigNoz will not start
+```
+http://host.docker.internal:8000/api/webhooks/signoz
+```
 
-The SDK also mirrors everything to `.rewind/telemetry.jsonl`. Set
-`REWIND_BACKEND=mirror` and the entire app - reconstruction, replay, diff -
-keeps working offline. The default `auto` mode falls back automatically.
+That closes the loop. A bad run trips an alert, the alert lands in Rewind's
+triage queue, and you rewind it from there.
+
+## Lock file
+
+Commit whatever lock or generated output `foundryctl` writes next to
+`casting.yaml` so the deployment is reproducible.
+
+```bash
+git add signoz/
+git commit -m "Add Foundry generated output"
+```
+
+## Retention
+
+Defaults are fine for a demo. To change them, use **Settings -> Retention** in
+the SigNoz UI rather than hand-editing generated files.
