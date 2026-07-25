@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Rewind &middot; runs{% endblock %}
+{% block content %}
+
+{% if queue %}
+<section class="mb-5">
+  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-400">From SigNoz alerts</h2>
+  <div class="space-y-2">
+    {% for item in queue %}{% if not item.resolved %}
+    <a href="/runs/{{ item.trace_id }}"
+       class="flex items-center justify-between rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+      <div>
+        <div class="text-sm font-medium text-amber-200">{{ item.alert }}</div>
+        <div class="mono text-xs text-amber-200/60">{{ item.trace_id[:16] }}</div>
+      </div>
+      <span class="text-amber-300">&rsaquo;</span>
+    </a>
+    {% endif %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<div class="mb-3 flex items-baseline justify-between">
+  <h1 class="text-lg font-semibold">Recent runs</h1>
+  <span class="text-xs text-slate-500">{{ runs|length }} total</span>
+</div>
+
+{% if not runs %}
+<div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center">
+  <div class="mb-1 text-3xl">&#9194;</div>
+  <h2 class="text-base font-semibold">No runs yet</h2>
+  <p class="mx-auto mt-1 max-w-sm text-sm text-slate-400">
+    Generate the demo run: a support agent reads a stale refund policy and approves
+    a refund it should have denied. Then rewind it.
+  </p>
+  <form method="post" action="/demo/seed" class="mt-4">
+    <button class="w-full rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white active:bg-sky-600">
+      Generate demo run
+    </button>
+  </form>
+</div>
+{% else %}
+<div class="space-y-2">
+  {% for run in runs %}
+  <a href="/runs/{{ run.trace_id }}"
+     class="block rounded-xl border px-4 py-3 {% if run.failed %}border-rose-500/40 bg-rose-500/5{% else %}border-slate-800 bg-slate-900/60{% endif %}">
+    <div class="flex items-center justify-between gap-3">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="h-2 w-2 shrink-0 rounded-full {% if run.failed %}bg-rose-500{% else %}bg-emerald-500{% endif %}"></span>
+          <span class="truncate text-sm font-medium">{{ run.agent }}</span>
+          {% if run.is_experiment %}
+          <span class="rounded-full border border-sky-500/40 px-2 py-0.5 text-[10px] uppercase text-sky-300">fork</span>
+          {% endif %}
+        </div>
+        <div class="mt-1 truncate text-xs text-slate-400">{{ run.answer or run.question }}</div>
+      </div>
+      <span class="shrink-0 text-slate-600">&rsaquo;</span>
+    </div>
+    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+      <span>{{ run.steps|length }} steps</span>
+      <span>{{ "%.0f"|format(run.duration_ms) }} ms</span>
+      <span>{{ run.total_tokens }} tokens</span>
+      <span>${{ "%.5f"|format(run.total_cost_usd) }}</span>
+      <span class="mono">{{ run.trace_id[:12] }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+<form method="post" action="/demo/seed" class="mt-4">
+  <button class="w-full rounded-xl border border-slate-700 px-4 py-3 text-sm text-slate-300 active:bg-slate-800">
+    Generate another demo run
+  </button>
+</form>
+{% endif %}
+
+{% endblock %}

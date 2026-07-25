@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Rewind{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body class="h-full bg-slate-950 text-slate-100 antialiased">
+  <header class="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/95 backdrop blur">
+    <div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
+      <a href="/" class="flex items-center gap-2 text-base font-semibold">
+        <span>&#9194;</span><span>Rewind</span>
+      </a>
+      <div class="flex items-center gap-3 text-xs text-slate-400">
+        <span class="rounded-full border border-slate-700 px-2 py-0.5">source: {{ backend }}</span>
+        <a class="text-sky-400 hover:underline" href="{{ signoz_ui }}" target="_blank" rel="noreferrer">SigNoz</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-4 pb-24 pt-4">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="mx-auto max-w-3xl px-4 pb-8 text-center text-xs text-slate-600">
+    Rewind &middot; replay your agents from their own telemetry &middot; powered by SigNoz
+  </footer>
+</body>
+</html>
