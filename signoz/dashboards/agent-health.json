@@ -1,0 +1,249 @@
+{
+  "title": "Agent health (Rewind)",
+  "description": "Health of instrumented AI agents: throughput, errors, latency, tokens, cost, tools and replays.",
+  "tags": ["rewind", "agents", "genai"],
+  "version": "v4",
+  "variables": {
+    "service": {
+      "type": "TEXTBOX",
+      "name": "service",
+      "description": "Service name emitting agent telemetry",
+      "textboxValue": "rewind-demo-agent"
+    }
+  },
+  "layout": [
+    {"i": "runs-per-minute", "x": 0, "y": 0, "w": 6, "h": 6},
+    {"i": "error-rate", "x": 6, "y": 0, "w": 6, "h": 6},
+    {"i": "run-duration", "x": 0, "y": 6, "w": 12, "h": 6},
+    {"i": "tokens-by-model", "x": 0, "y": 12, "w": 6, "h": 6},
+    {"i": "cost-per-hour", "x": 6, "y": 12, "w": 6, "h": 6},
+    {"i": "tool-calls", "x": 0, "y": 18, "w": 6, "h": 6},
+    {"i": "top-failing-spans", "x": 6, "y": 18, "w": 6, "h": 6},
+    {"i": "replays", "x": 0, "y": 24, "w": 12, "h": 6}
+  ],
+  "widgets": [
+    {
+      "id": "runs-per-minute",
+      "title": "Runs per minute",
+      "description": "Agent run throughput",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {"key": "agent.run.duration.count", "type": "Sum"},
+              "timeAggregation": "rate",
+              "spaceAggregation": "sum",
+              "stepInterval": 60,
+              "expression": "A",
+              "legend": "runs/min"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "error-rate",
+      "title": "Errors and guardrail failures",
+      "description": "Runs that ended in an error or tripped a guardrail",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {"key": "agent.run.errors", "type": "Sum"},
+              "timeAggregation": "rate",
+              "spaceAggregation": "sum",
+              "groupBy": [{"key": "reason", "type": "tag"}],
+              "stepInterval": 60,
+              "expression": "A",
+              "legend": "{{reason}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "run-duration",
+      "title": "Run duration p50 / p95 / p99",
+      "description": "End to end agent latency in milliseconds",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "p50",
+              "aggregateAttribute": {"key": "agent.run.duration", "type": "Histogram"},
+              "timeAggregation": "p50",
+              "spaceAggregation": "p50",
+              "stepInterval": 60,
+              "expression": "A",
+              "legend": "p50"
+            },
+            {
+              "queryName": "B",
+              "dataSource": "metrics",
+              "aggregateOperator": "p95",
+              "aggregateAttribute": {"key": "agent.run.duration", "type": "Histogram"},
+              "timeAggregation": "p95",
+              "spaceAggregation": "p95",
+              "stepInterval": 60,
+              "expression": "B",
+              "legend": "p95"
+            },
+            {
+              "queryName": "C",
+              "dataSource": "metrics",
+              "aggregateOperator": "p99",
+              "aggregateAttribute": {"key": "agent.run.duration", "type": "Histogram"},
+              "timeAggregation": "p99",
+              "spaceAggregation": "p99",
+              "stepInterval": 60,
+              "expression": "C",
+              "legend": "p99"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "tokens-by-model",
+      "title": "Tokens by model",
+      "description": "gen_ai.client.token.usage grouped by model",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "sum",
+              "aggregateAttribute": {"key": "gen_ai.client.token.usage", "type": "Sum"},
+              "timeAggregation": "increase",
+              "spaceAggregation": "sum",
+              "groupBy": [{"key": "model", "type": "tag"}],
+              "stepInterval": 60,
+              "expression": "A",
+              "legend": "{{model}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cost-per-hour",
+      "title": "Cost per hour (USD)",
+      "description": "Estimated model spend",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "sum",
+              "aggregateAttribute": {"key": "agent.run.cost.usd", "type": "Sum"},
+              "timeAggregation": "increase",
+              "spaceAggregation": "sum",
+              "stepInterval": 3600,
+              "expression": "A",
+              "legend": "USD/hour"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "tool-calls",
+      "title": "Tool call distribution",
+      "description": "Which tools the agents actually use",
+      "panelTypes": "bar",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "sum",
+              "aggregateAttribute": {"key": "agent.tool.calls", "type": "Sum"},
+              "timeAggregation": "increase",
+              "spaceAggregation": "sum",
+              "groupBy": [{"key": "tool", "type": "tag"}],
+              "stepInterval": 300,
+              "expression": "A",
+              "legend": "{{tool}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "top-failing-spans",
+      "title": "Top failing spans",
+      "description": "Error spans grouped by name",
+      "panelTypes": "table",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "traces",
+              "aggregateOperator": "count",
+              "timeAggregation": "count",
+              "spaceAggregation": "sum",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {"key": {"key": "hasError", "type": "tag"}, "op": "=", "value": "true"}
+                ]
+              },
+              "groupBy": [{"key": "name", "type": "tag"}],
+              "expression": "A",
+              "legend": "{{name}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "replays",
+      "title": "Replays by override type",
+      "description": "How often each kind of hypothesis is being tested",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "sum",
+              "aggregateAttribute": {"key": "rewind.replays", "type": "Sum"},
+              "timeAggregation": "increase",
+              "spaceAggregation": "sum",
+              "groupBy": [{"key": "override_type", "type": "tag"}],
+              "stepInterval": 300,
+              "expression": "A",
+              "legend": "{{override_type}}"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

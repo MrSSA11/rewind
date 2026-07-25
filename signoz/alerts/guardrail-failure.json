@@ -1,0 +1,49 @@
+{
+  "alert": "Agent guardrail failure",
+  "alertType": "LOGS_BASED_ALERT",
+  "description": "An agent produced an output that violated a ground-truth guardrail. This is the alert that starts the Rewind debugging loop: the offending trace id is pushed into the triage queue.",
+  "ruleType": "threshold_rule",
+  "evalWindow": "5m",
+  "frequency": "1m",
+  "labels": {
+    "severity": "critical",
+    "team": "ai",
+    "runbook": "Open the run in Rewind, fork the retrieval step, replay with the correct document."
+  },
+  "annotations": {
+    "summary": "Guardrail failed on an agent run",
+    "description": "Trace {{trace_id}} produced a disallowed output. Rewind it to find the cause."
+  },
+  "condition": {
+    "compositeQuery": {
+      "queryType": "builder",
+      "panelType": "graph",
+      "builderQueries": {
+        "A": {
+          "queryName": "A",
+          "dataSource": "logs",
+          "aggregateOperator": "count",
+          "timeAggregation": "count",
+          "spaceAggregation": "sum",
+          "stepInterval": 60,
+          "expression": "A",
+          "filters": {
+            "op": "AND",
+            "items": [
+              {
+                "key": {"key": "rewind.kind", "type": "tag", "dataType": "string"},
+                "op": "=",
+                "value": "guardrail_failure"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "op": ">=",
+    "target": 1,
+    "matchType": "1",
+    "targetUnit": "count"
+  },
+  "preferredChannels": ["rewind"]
+}

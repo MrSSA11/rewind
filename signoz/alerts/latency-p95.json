@@ -1,0 +1,37 @@
+{
+  "alert": "Agent run latency p95 high",
+  "alertType": "METRIC_BASED_ALERT",
+  "description": "p95 end to end run duration is above 20 seconds. The agent is probably looping, or a tool has become slow.",
+  "ruleType": "threshold_rule",
+  "evalWindow": "5m",
+  "frequency": "1m",
+  "labels": {"severity": "warning", "team": "ai"},
+  "annotations": {
+    "summary": "Agent p95 latency above 20s",
+    "description": "Open the slowest run in Rewind and look at per-step durations."
+  },
+  "condition": {
+    "compositeQuery": {
+      "queryType": "builder",
+      "panelType": "graph",
+      "builderQueries": {
+        "A": {
+          "queryName": "A",
+          "dataSource": "metrics",
+          "aggregateAttribute": {"key": "agent.run.duration", "type": "Histogram"},
+          "aggregateOperator": "p95",
+          "timeAggregation": "p95",
+          "spaceAggregation": "p95",
+          "stepInterval": 60,
+          "expression": "A",
+          "legend": "p95 ms"
+        }
+      }
+    },
+    "op": ">",
+    "target": 20000,
+    "matchType": "1",
+    "targetUnit": "ms"
+  },
+  "preferredChannels": ["rewind"]
+}

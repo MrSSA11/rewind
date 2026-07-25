@@ -1,0 +1,37 @@
+{
+  "alert": "Agent cost spike",
+  "alertType": "METRIC_BASED_ALERT",
+  "description": "Model spend crossed the hourly budget. Usually a retry loop, a runaway context, or an accidental switch to an expensive model.",
+  "ruleType": "threshold_rule",
+  "evalWindow": "1h",
+  "frequency": "5m",
+  "labels": {"severity": "warning", "team": "ai"},
+  "annotations": {
+    "summary": "Agent spend above budget",
+    "description": "Use Rewind to replay an expensive run with a cheaper model and compare cost against answer quality."
+  },
+  "condition": {
+    "compositeQuery": {
+      "queryType": "builder",
+      "panelType": "graph",
+      "builderQueries": {
+        "A": {
+          "queryName": "A",
+          "dataSource": "metrics",
+          "aggregateAttribute": {"key": "agent.run.cost.usd", "type": "Sum"},
+          "aggregateOperator": "sum",
+          "timeAggregation": "increase",
+          "spaceAggregation": "sum",
+          "stepInterval": 3600,
+          "expression": "A",
+          "legend": "USD/hour"
+        }
+      }
+    },
+    "op": ">",
+    "target": 5,
+    "matchType": "1",
+    "targetUnit": "none"
+  },
+  "preferredChannels": ["rewind"]
+}

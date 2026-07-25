@@ -1,0 +1,51 @@
+{
+  "alert": "Agent error rate high",
+  "alertType": "METRIC_BASED_ALERT",
+  "description": "More than 10% of agent runs are failing over a 5 minute window. Something systemic broke: a tool, the model provider, or a prompt change.",
+  "ruleType": "threshold_rule",
+  "evalWindow": "5m",
+  "frequency": "1m",
+  "labels": {"severity": "critical", "team": "ai"},
+  "annotations": {
+    "summary": "Agent error rate above 10%",
+    "description": "Open Rewind and replay a failing run to find which step broke."
+  },
+  "condition": {
+    "compositeQuery": {
+      "queryType": "builder",
+      "panelType": "graph",
+      "builderQueries": {
+        "A": {
+          "queryName": "A",
+          "dataSource": "metrics",
+          "aggregateAttribute": {"key": "agent.run.errors", "type": "Sum"},
+          "aggregateOperator": "rate",
+          "timeAggregation": "rate",
+          "spaceAggregation": "sum",
+          "stepInterval": 60,
+          "expression": "A",
+          "disabled": true
+        },
+        "B": {
+          "queryName": "B",
+          "dataSource": "metrics",
+          "aggregateAttribute": {"key": "agent.run.duration.count", "type": "Sum"},
+          "aggregateOperator": "rate",
+          "timeAggregation": "rate",
+          "spaceAggregation": "sum",
+          "stepInterval": 60,
+          "expression": "B",
+          "disabled": true
+        }
+      },
+      "queryFormulas": [
+        {"queryName": "F1", "expression": "A / B", "legend": "error ratio"}
+      ]
+    },
+    "op": ">",
+    "target": 0.1,
+    "matchType": "1",
+    "selectedQueryName": "F1"
+  },
+  "preferredChannels": ["rewind"]
+}
