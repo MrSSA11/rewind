@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Step {{ step.index }}{% endblock %}
+{% block content %}
+
+<a href="/runs/{{ run.trace_id }}" class="text-xs text-slate-400">&lsaquo; back to run</a>
+
+<div class="mt-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+  <div class="flex items-center gap-2">
+    <span class="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase text-slate-400">{{ step.kind }}</span>
+    <h1 class="text-base font-semibold">{{ step.index }}. {{ step.name }}</h1>
+  </div>
+  <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+    <span>{{ "%.0f"|format(step.duration_ms) }} ms</span>
+    {% if step.tokens %}<span>{{ step.tokens }} tokens</span>{% endif %}
+    {% if step.cost_usd %}<span>${{ "%.5f"|format(step.cost_usd) }}</span>{% endif %}
+    <span>source: {{ step.source }}</span>
+  </div>
+</div>
+
+{% if step.envelope %}
+{% set env = step.envelope %}
+
+{% if env.messages %}
+<h2 class="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Prompt</h2>
+<div class="space-y-2">
+  {% for message in env.messages %}
+  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+    <div class="text-[10px] uppercase text-slate-500">{{ message.role }}</div>
+    <pre class="mono mt-1 whitespace-pre-wrap break-words text-xs text-slate-300">{{ message.content }}</pre>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if env.tool %}
+<h2 class="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Tool</h2>
+<div class="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+  <div class="text-[10px] uppercase text-slate-500">arguments</div>
+  <pre class="mono mt-1 whitespace-pre-wrap break-words text-xs text-slate-300">{{ env.tool.args }}</pre>
+  <div class="mt-3 text-[10px] uppercase text-slate-500">result</div>
+  <pre class="mono mt-1 whitespace-pre-wrap break-words text-xs text-slate-300">{{ env.tool.result }}</pre>
+</div>
+{% endif %}
+
+{% if env.output %}
+<h2 class="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Output</h2>
+<pre class="mono whitespace-pre-wrap break-words rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300">{{ env.output }}</pre>
+{% endif %}
+
+{% if env.redacted_fields or env.truncated_fields %}
+<p class="mt-2 text-[11px] text-amber-400">
+  {% if env.redacted_fields %}redacted: {{ env.redacted_fields|join(", ") }}{% endif %}
+  {% if env.truncated_fields %} truncated: {{ env.truncated_fields|join(", ") }}{% endif %}
+</p>
+{% endif %}
+
+<h2 class="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Rewind from here</h2>
+<form method="post" action="/runs/{{ run.trace_id }}/fork"
+      class="space-y-3 rounded-2xl border border-sky-500/40 bg-sky-500/5 p-4">
+  <input type="hidden" name="span_id" value="{{ step.span_id }}">
+  <p class="text-xs text-slate-400">Change exactly one thing, then replay from this step forward.</p>
+
+  <label class="block text-xs text-slate-400">What to change
+    <select name="override_type"
+            class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+      {% if step.kind == 'llm' %}
+      <option value="prompt">Edit the prompt</option>
+      <option value="model">Swap the model</option>
+      {% else %}
+      <option value="tool_result">Override the tool result</option>
+      {% endif %}
+    </select>
+  </label>
+
+  <label class="block text-xs text-slate-400">New value
+    <textarea name="override_value" rows="5" required
+              class="mono mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100"
+              placeholder="Refunds Policy (v3, current): the refund window is 14 days."></textarea>
+  </label>
+
+  <button class="w-full rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white active:bg-sky-600">
+    Replay from step {{ step.index }}
+  </button>
+  <p class="text-center text-[11px] text-slate-500">Steps before this one are restored from telemetry, not re-run.</p>
+</form>
+
+{% else %}
+<div class="mt-5 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
+  No replay envelope was found for this step, so it is read-only. Envelopes are
+  emitted as logs; check that log ingestion is working in SigNoz.
+</div>
+{% endif %}
+
+<a href="{{ trace_url }}" target="_blank" rel="noreferrer"
+   class="mt-4 block rounded-lg border border-slate-700 px-3 py-2 text-center text-xs text-sky-400">
+  View this span in SigNoz
+</a>
+
+{% endblock %}
