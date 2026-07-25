@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Diff{% endblock %}
+{% block content %}
+
+<a href="/runs/{{ run_a.trace_id }}" class="text-xs text-slate-400">&lsaquo; back to original run</a>
+
+<h1 class="mt-2 text-lg font-semibold">Before and after</h1>
+<p class="text-xs text-slate-400">
+  One change: <span class="text-sky-300">{{ result.override_type or "none" }}</span>
+  {% if result.divergence_index is not none %}
+  &middot; the runs stop agreeing at step {{ result.divergence_index }}
+  {% endif %}
+</p>
+
+{% if result.status.improved %}
+<div class="mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+  Fixed. The original run ended in <strong>{{ result.status.a }}</strong> and the fork ended in
+  <strong>{{ result.status.b }}</strong>.
+</div>
+{% endif %}
+
+<div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+  {% for label, key in [("Latency", "latency_ms"), ("Tokens", "tokens"), ("Cost", "cost_usd"), ("Steps", "steps")] %}
+  {% set metric = result.metrics[key] %}
+  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+    <div class="text-[10px] uppercase text-slate-500">{{ label }}</div>
+    <div class="mt-1 text-sm font-semibold">
+      {% if metric.direction == 'down' %}<span class="text-emerald-400">&darr;</span>
+      {% elif metric.direction == 'up' %}<span class="text-rose-400">&uarr;</span>
+      {% else %}<span class="text-slate-500">&ndash;</span>{% endif %}
+      {{ "%.4f"|format(metric.change) if key == 'cost_usd' else "%.0f"|format(metric.change) }}
+    </div>
+    <div class="text-[11px] text-slate-500">
+      {{ "%.4f"|format(metric.before) if key == 'cost_usd' else "%.0f"|format(metric.before) }}
+      &rarr;
+      {{ "%.4f"|format(metric.after) if key == 'cost_usd' else "%.0f"|format(metric.after) }}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<h2 class="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Final answer</h2>
+<div class="space-y-2 sm:grid sm:grid-cols-2 sm:gap-2 sm:space-y-0">
+  <div class="rounded-xl border border-rose-500/30 bg-rose-500/5 p-3">
+    <div class="text-[10px] uppercase text-rose-300">original</div>
+    <p class="mt-1 text-sm text-slate-200">{{ result.answers.a }}</p>
+  </div>
+  <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+    <div class="text-[10px] uppercase text-emerald-300">after rewind</div>
+    <p class="mt-1 text-sm text-slate-200">{{ result.answers.b }}</p>
+  </div>
+</div>
+
+<h2 class="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Word by word</h2>
+<p class="rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm leading-relaxed">
+  {% for chunk in result.answer_diff %}{% if chunk.op == 'same' %}<span class="text-slate-400">{{ chunk.text }}</span>
+  {% elif chunk.op == 'removed' %}<span class="bg-rose-500/20 text-rose-200 line-through">{{ chunk.text }}</span>
+  {% else %}<span class="bg-emerald-500/20 text-emerald-200">{{ chunk.text }}</span>{% endif %} {% endfor %}
+</p>
+
+<h2 class="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Tool path</h2>
+<div class="space-y-2 sm:grid sm:grid-cols-2 sm:gap-2 sm:space-y-0">
+  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+    <div class="text-[10px] uppercase text-slate-500">original</div>
+    <div class="mono mt-1 text-xs text-slate-300">{{ result.tool_path.a|join(" &rarr; ")|safe or "none" }}</div>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+    <div class="text-[10px] uppercase text-slate-500">after rewind</div>
+    <div class="mono mt-1 text-xs text-slate-300">{{ result.tool_path.b|join(" &rarr; ")|safe or "none" }}</div>
+  </div>
+</div>
+
+<div class="mt-6 grid grid-cols-2 gap-2">
+  <a href="{{ url_a }}" target="_blank" rel="noreferrer"
+     class="rounded-lg border border-slate-700 px-3 py-2 text-center text-xs text-sky-400">Original in SigNoz</a>
+  <a href="{{ url_b }}" target="_blank" rel="noreferrer"
+     class="rounded-lg border border-slate-700 px-3 py-2 text-center text-xs text-sky-400">Fork in SigNoz</a>
+</div>
+
+{% endblock %}
