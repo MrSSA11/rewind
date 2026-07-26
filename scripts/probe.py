@@ -41,8 +41,41 @@ def main() -> int:
 
     client = SigNozClient()
 
+    raw = os.getenv("SIGNOZ_API_KEY", "")
+    if raw:
+        line("key length", len(raw))
+        if raw != raw.strip():
+            print("  !! the key has leading or trailing whitespace")
+        if raw[:1] in "\"'" or raw[-1:] in "\"'":
+            print("  !! the key is wrapped in quotes - remove them from .env")
+
     print("\n=== can we reach signoz at all ===")
     print(json.dumps(client.signoz.health(), indent=2))
+
+    print("\n=== is the api key itself valid ===")
+    if not _env("SIGNOZ_API_KEY"):
+        print("  no SIGNOZ_API_KEY is set, so every authenticated call will 401.")
+        print("  Add it to .env in the repo root:  SIGNOZ_API_KEY=your-key")
+    else:
+        # The endpoint SigNoz documents for validating a service account key.
+        try:
+            with client.signoz._client() as http:
+                response = http.get("/api/v1/service_accounts/me")
+            print("  GET /api/v1/service_accounts/me -> " + str(response.status_code))
+            if response.status_code == 200:
+                print("  the key is valid.")
+            elif response.status_code == 401:
+                print("  the key was rejected. It is wrong, revoked, or expired.")
+                print("  Create a fresh one: Settings -> Service Accounts -> your")
+                print("  account -> Keys tab -> Add Key. Copy the value immediately,")
+                print("  it is shown only once. Copy the KEY, not the account ID.")
+            elif response.status_code == 403:
+                print("  the key is valid but lacks permission. Give the service")
+                print("  account a role that can read traces and logs.")
+            else:
+                print("  body: " + response.text[:300])
+        except Exception as exc:
+            print("  could not check: " + type(exc).__name__ + ": " + str(exc)[:200])
 
     print("\n=== raw query, no fallback ===")
     try:
@@ -77,7 +110,7 @@ def main() -> int:
     through_facade = client.list_trace_bundles(10)
     line("served by", client.last_used)
     line("bundles", len(through_facade))
-    line("last error", getattr(client, "last_error", "") or "none")
+    line("last error", client.last_error or "none")
     print("")
     return 0
 

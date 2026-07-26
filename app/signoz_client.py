@@ -20,7 +20,18 @@ from rewind_sdk import mirror
 
 
 def _env(name: str, default: str = "") -> str:
-    return os.getenv(name, default)
+    """Read an env var, tolerating the ways people hand-edit a .env file.
+
+    Stray whitespace or wrapping quotes around an API key produce a bare 401
+    with nothing to go on, so strip them here rather than debug them later.
+    """
+    value = os.getenv(name)
+    if value is None:
+        return default
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1].strip()
+    return value or default
 
 
 class MirrorBackend:
@@ -294,6 +305,10 @@ class SigNozClient:
         self.mirror = MirrorBackend()
         self.signoz = SigNozBackend()
         self.last_used = "mirror"
+        # Why the most recent SigNoz read did not win. Falling back silently
+        # keeps the demo alive but makes misconfiguration invisible, so we
+        # keep the reason and surface it on /healthz.
+        self.last_error = ""
 
     def ui_url(self) -> str:
         return _env("SIGNOZ_UI_URL", _env("SIGNOZ_URL", "http://localhost:8080")).rstrip("/")
@@ -312,6 +327,7 @@ class SigNozClient:
             "signoz": signoz_health,
             "mirror": self.mirror.health(),
             "serving": self.last_used,
+            "last_read_error": self.last_error or "none",
         }
 
     def _try(self, method: str, *args):
@@ -320,13 +336,22 @@ class SigNozClient:
                 result = getattr(self.signoz, method)(*args)
                 if result and (not isinstance(result, dict) or result.get("spans")):
                     self.last_used = "signoz"
+                    self.last_error = ""
                     return result
                 if self.mode == "signoz":
                     self.last_used = "signoz"
+                    self.last_error = ""
                     return result
-            except Exception:
+                self.last_error = (
+                    method
+                    + " reached SigNoz but matched no rows, so the mirror answered"
+                )
+            except Exception as exc:
                 if self.mode == "signoz":
                     raise
+                self.last_error = (
+                    method + " failed: " + type(exc).__name__ + ": " + str(exc)[:300]
+                )
         self.last_used = "mirror"
         return getattr(self.mirror, method)(*args)
 
