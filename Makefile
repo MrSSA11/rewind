@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install signoz demo run test health doctor clean
+.PHONY: help install signoz demo run test health doctor probe clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
@@ -38,6 +38,9 @@ print('records     :', len(r));\
 print('backend     :', os.getenv('REWIND_BACKEND','auto'));\
 print('traces      :', len(t));\
 [print('   ', k, '->', v[0], 'spans,', v[1], 'envelopes') for k,v in t.items()]"
+
+probe: ## Ask SigNoz directly why Rewind is not reading from it
+	@python scripts/probe.py
 
 clean: ## Remove the local telemetry mirror and caches
 	rm -rf .rewind .pytest_cache
