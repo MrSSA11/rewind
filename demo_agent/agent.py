@@ -31,6 +31,57 @@ SYSTEM_PROMPT = (
     "DECISION: DENY followed by a one line reason."
 )
 
+# Phrases where the word APPROVE appears but the model is refusing. A naive
+# substring check reads "I cannot approve this refund" as an approval, which
+# silently inverts the whole demo once a real model is answering.
+NEGATIONS = (
+    "CANNOT APPROVE",
+    "CAN NOT APPROVE",
+    "CAN'T APPROVE",
+    "NOT APPROVE",
+    "NOT APPROVED",
+    "UNABLE TO APPROVE",
+    "DO NOT APPROVE",
+    "DON'T APPROVE",
+    "WILL NOT APPROVE",
+    "WON'T APPROVE",
+    "SHOULD NOT APPROVE",
+    "NO APPROVAL",
+    "WITHOUT APPROVAL",
+)
+
+REFUSALS = ("DENY", "DENIED", "DECLINE", "DECLINED", "REJECT", "REJECTED")
+
+
+def _negated(text: str) -> bool:
+    return any(phrase in text for phrase in NEGATIONS)
+
+
+def parse_decision(text: str) -> bool:
+    """True when the model approved the refund.
+
+    Prefers an explicit "DECISION:" line, because that is what the system
+    prompt asks for. Falls back to scanning the whole reply, ignoring negated
+    forms of "approve". Real models pad their answers with prose, so this has
+    to survive markdown bullets, bold markers, and trailing reasoning.
+    """
+    upper = str(text).upper()
+
+    for raw_line in upper.splitlines():
+        line = raw_line.strip().strip("*_#-> ").strip()
+        if not line.startswith("DECISION"):
+            continue
+        _, _, verdict = line.partition(":")
+        verdict = verdict.strip() or line
+        if any(word in verdict for word in REFUSALS):
+            return False
+        if "APPROVE" in verdict and not _negated(verdict):
+            return True
+
+    if any(word in upper for word in REFUSALS):
+        return False
+    return "APPROVE" in upper and not _negated(upper)
+
 
 def run_agent(question: str = DEFAULT_QUESTION, rw: Rewind = None, plan=None) -> dict:
     """Execute the agent once. Pass a ReplayPlan to run it as a fork."""
@@ -63,7 +114,7 @@ def run_agent(question: str = DEFAULT_QUESTION, rw: Rewind = None, plan=None) ->
             ],
         )
 
-        approved = "APPROVE" in str(decision).upper()
+        approved = parse_decision(decision)
         refund_receipt = ""
         if approved:
             refund_receipt = rw.tool_call(
